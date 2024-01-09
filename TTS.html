@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>TwTTS</title>
+  <script src="./tmi.js"></script>
+  <style>
+  body {
+    padding: 0 8px;
+    background-color: #070707;
+    color: #fbfbfb;
+    font-family: 'Courier New', Courier, monospace;
+    line-height: 1.5;
+    --radius: 8px;
+  }
+  .row {
+    display: flex;
+  }
+  .col {
+    display: flex;
+    flex-direction: column;
+  }
+  .row, .col {
+    gap: .75ch;
+  }
+  .rowbreak {
+    width: 100%;
+    height: 0;
+  }
+  button {
+    font-family: inherit;
+    padding: .5ch .75ch;
+    background-color: bisque;
+  }
+  #elFilePicker {
+    display: none;
+  }
+  hr {
+    width: 99%;
+    height: 2px;
+    border: 0;
+    background-color: #999;
+  }
+  label {
+    margin-right: 1ch;
+  }
+  .faded, small {
+    color: #c7c7c7;
+  }
+  small {
+    font-size: smaller;
+  }
+  .field {
+    display: flex;
+    flex-direction: column;
+    background-color: darkslateblue;
+    border-radius: var(--radius);
+    padding: .25ch .75ch .75ch;
+  }
+  .field.symm {
+    padding: .75ch;
+  }
+  .str-piece-name {
+    width: 15ch;
+  }
+
+  @keyframes flash {
+    0% {opacity: 0;}
+    10% {opacity: 1;}
+    80% {opacity: 1;}
+    100% {opacity: 0;}
+  }
+  #elSaveLoadStatus.shown {
+    animation-name: flash;
+    animation-duration: 2s;
+    animation-fill-mode: both;
+  }
+  #btnDisableVotes {
+    background-color: indianred;
+    font-weight: bold;
+    color: black;
+  }
+  #btnEnableVotes {
+    background-color: yellowgreen;
+    font-weight: bold;
+  }
+  .config-section {
+    margin-bottom: 2em;
+  }
+  .interrupt {
+    background-color: maroon;
+    border-radius: var(--radius);
+    color: #e7e7e7;
+  }
+
+  .ecn {
+    display: none;
+  }
+  .ecn-on .ecn.row, .ecn-on .ecn.col {
+    display: flex;
+  }
+  .ecn-on .ecn {
+    display: initial;
+  }
+  </style>
+</head>
+<body>
+  <div class="config-section">
+    <h2 style="margin-bottom: 0">Twitch TTS</h2>
+    <h5 style="margin: 0 0 1em; font-weight: normal;">made by <a href="https://twitch.tv/SimpleVar" style="color: aquamarine">SimpleVar</a></h5>
+    <div class="row" style="flex-wrap: wrap">
+      <div class="row" style="gap: 1ch; width: 100%; align-items: center">
+        <button onclick="saveConfig()">save</button>
+        <button onclick="loadConfig()">load</button>
+        <small id="elSaveLoadStatus">Saved</small>
+        <button onclick="importConfig()">import</button>
+        <button onclick="exportConfig()">export</button>
+        <input id="elFilePicker" type="file" onchange="onFileSelected(event)">
+        <button style="margin-left: auto" class="interrupt" onclick="speechSynthesis.cancel()">Interrupt TTS !sh</button>
+        <div class="row" style="align-items: center; background-color: pink; border-radius: var(--radius); color:black">
+          <input id="elSubsOnly" type="checkbox" name="elSubsOnly" style="margin-left: .75ch; outline: none;"
+            oninput="config.subs_only_mode = event.target.checked" />
+          <label for="elSubsOnly" style="margin-left: -.5ch; outline: none;">Subs Only</label>
+        </div>
+      </div>
+      <div class="field">
+        <label for="elChannels">Twitch channels to listen to:</label>
+        <small>space/comma separated (only takes effect after refresh)</small>
+        <input id="elChannels" type="text" name="elChannels" style="width: 30ch" autocomplete="off" spellcheck="false"
+          onchange="config.channels = event.target.value.split(/[\s,]/).filter(x => x)" />
+	<br/>
+        <div class="row" style="margin-bottom: .5ch">
+          <label for="elVolume">Volume:</label>
+          <input id="elVolume" type="number" name="elVolume" min="0" max=100 value="50" style="width: 7ch"
+            oninput="config.volume = Math.max(0, Math.min(100, event.target.value | 0))" />
+        </div>
+      </div>
+      <div class="field">
+        <span>TTS Voices:</span>
+        <table>
+          <thead><th style="width: 3ch"></th><th style="width: 0"></th><th></th></thead>
+          <tbody>
+            <tr>
+              <td>0</td><td><label for="elDefaultVoice">default</label></td>
+              <td><select id="elDefaultVoice" name="elDefaultVoice" style="width: 48ch"></select></td>
+            </tr>
+            <tr>
+              <td>1</td><td><label for="elFemaleVoice">female</label></td>
+              <td><select id="elFemaleVoice" name="elFemaleVoice" style="width: 48ch"></select></td>
+            </tr>
+            <tr>
+              <td>2</td><td><label for="elMaleVoice">male</label></td>
+              <td><select id="elMaleVoice" name="elMaleVoice" style="width: 48ch"></select></td>
+            </tr>
+            <tr>
+              <td>3</td><td>silent</td>
+            </tr>
+          </tbody>
+        </table>
+        <label for="elWhoCanCustomizeVoice">Who can customize their voice? e.g. <code><strong>!ttsvoice 1</strong></code></label>
+        <select id="elWhoCanCustomizeVoice" name="elWhoCanCustomizeVoice" style="width: 15ch"
+          oninput="config.who_can_customize_voice = event.target.value">
+          <option value="">no one</option>
+          <option value="S">subs & mods</option>
+          <option value="E">all viewers</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="elCustomPrefix">Custom TTS prefix:</label>
+        <small>leave empty to read all</small>
+        <input id="elCustomPrefix" type="text" name="elCustomPrefix" style="width: 10ch" autocomplete="off" spellcheck="false"
+          oninput="config.custom_prefix = event.target.value.trim()" />
+      </div>
+      <div class="field">
+        <label for="elIgnoredPrefixes">Ignored prefixes or other commands:</label>
+        <small>* only needed when the TTS prefix is empty or clashes with other commands</small>
+        <small>space separated e.g. "!next !discord"</small>
+        <input id="elIgnoredPrefixes" type="text" name="elIgnoredPrefixes" style="width: 50ch" autocomplete="off" spellcheck="false"
+          onchange="config.ignored_prefixes = event.target.value.split(/\s/).filter(x => x)" />
+      </div>
+      <div class="field">
+        <span>Message Length:</span>
+        <div class="row" style="margin-bottom: .5ch">
+          <label for="elMsgLenMin">min</label>
+          <input id="elMsgLenMin" type="number" name="elMsgLenMin" min="0" value="0" style="width: 7ch"
+            oninput="config.msg_len_min = Math.max(0, event.target.value | 0)" />
+        </div>
+        <div class="row">
+          <label for="elMsgLenMax">max</label>
+          <div>
+            <input id="elMsgLenMax" type="number" name="elMsgLenMax" min="0" value="0" style="width: 7ch"
+              oninput="config.msg_len_max = Math.max(0, event.target.value | 0)" />
+            <small>0 = no limit</small>
+          </div>
+        </div>
+      </div>
+      <div class="field">
+        <label for="elLinkPlaceholder">Link replacement:</label>
+        <small>leave empty to read links as is</small>
+        <input id="elLinkPlaceholder" type="text" name="elLinkPlaceholder" style="width: 20ch" autocomplete="off" spellcheck="false"
+          oninput="config.tts_link_placeholder = event.target.value.trim()" />
+      </div>
+      <div class="field">
+        <label for="elStrUserSays">Name before msg format:</label>
+        <small>e.g. "$name says" or "" (empty)</small>
+        <input id="elStrUserSays" type="text" name="elStrUserSays" style="width: 20ch" autocomplete="off" spellcheck="false"
+          oninput="config.str_user_says = event.target.value.trim()" />
+      </div>
+      <div class="field">
+        <label for="elStrGreetOnJoin">Greet user entering chat:</label>
+        <small>e.g. "welcome $name" or "" (empty)</small>
+        <input id="elStrGreetOnJoin" type="text" name="elStrGreetOnJoin" style="width: 20ch" autocomplete="off" spellcheck="false"
+          oninput="config.str_greet_on_join = event.target.value.trim()" />
+      </div>
+      <div class="field">
+        <span>TTS options:</span>
+        <div class="row" style="margin-bottom: .5ch">
+          <label for="elTTSrate">rate</label>
+          <div>
+            <input id="elTTSrate" type="number" name="elTTSrate" min="0.1" max="3" step="0.1" style="width: 7ch"
+              oninput="onChangeRate(+event.target.value)" />
+          </div>
+        </div>
+        <div class="row">
+          <label for="elTTSpitch">pitch</label>
+          <div>
+            <input id="elTTSpitch" type="number" name="elTTSpitch" min="0" max="2" step="0.25" style="width: 7ch"
+              oninput="onChangePitch(+event.target.value)" />
+          </div>
+        </div>
+      </div>
+      <div class="rowbreak"></div>
+      <div class="field">
+        <label for="elIgnoredUsers">Ignored users: (<span id="elIgnoredUsersCount">0</span>)</label>
+        <small>space/comma separated</small>
+        <textarea id="elIgnoredUsers" name="elIgnoredUsers" rows="7" autocomplete="off" spellcheck="false" style="resize: none"
+          onchange="elIgnoredUsersCount.innerText = (config.ignored_users = event.target.value.split(/[\r\n\s,]+/).filter(x => x).map(x => x.toLowerCase())).length"
+        ></textarea>
+      </div>
+      <div class="field">
+        <div class="row">
+          <input id="elEnableChessNotation" type="checkbox" name="elEnableChessNotation"
+            oninput="document.body.className = (config.enable_chess_notation = event.target.checked) ? 'ecn-on' : ''" />
+          <label for="elEnableChessNotation">Enable chess notation parsing</label>
+        </div>
+        <div class="row ecn">
+          <input id="elSilentChess" type="checkbox" name="elSilentChess" oninput="config.silent_chess = event.target.checked" />
+          <label for="elSilentChess">Silent</label>
+        </div>
+        <div class="row ecn">
+          <small>custom texts: (optional)</small>
+        </div>
+        <table class="ecn" style="display: none">
+          <thead>
+            <th style="width: 0"></th>
+            <th></th>
+          </thead>
+          <tbody>
+            <tr>
+              <td><label for="elChessName_pawn">pawn</label></td>
+              <td><input id="elChessName_pawn" type="text" name="elChessName_pawn" class="str-piece-name" autocomplete="off" spellcheck="false" maxlength="20"
+                oninput="config.str_pawn = event.target.value.trim()" /></td>
+            </tr>
+            <tr>
+              <td><label for="elChessName_knight">knight</label></td>
+              <td><input id="elChessName_knight" type="text" name="elChessName_knight" class="str-piece-name" autocomplete="off" spellcheck="false" maxlength="20"
+                oninput="config.str_knight = event.target.value.trim()" /></td>
+            </tr>
+            <tr>
+              <td><label for="elChessName_bishop">bishop</label></td>
+              <td><input id="elChessName_bishop" type="text" name="elChessName_bishop" class="str-piece-name" autocomplete="off" spellcheck="false" maxlength="20"
+                oninput="config.str_bishop = event.target.value.trim()" /></td>
+            </tr>
+            <tr>
+              <td><label for="elChessName_rook">rook</label></td>
+              <td><input id="elChessName_rook" type="text" name="elChessName_rook" class="str-piece-name" autocomplete="off" spellcheck="false" maxlength="20"
+                oninput="config.str_rook = event.target.value.trim()" /></td>
+            </tr>
+            <tr>
+              <td><label for="elChessName_queen">queen</label></td>
+              <td><input id="elChessName_queen" type="text" name="elChessName_queen" class="str-piece-name" autocomplete="off" spellcheck="false" maxlength="20"
+                oninput="config.str_queen = event.target.value.trim()" /></td>
+            </tr>
+            <tr>
+              <td><label for="elChessName_king">king</label></td>
+              <td><input id="elChessName_king" type="text" name="elChessName_king" class="str-piece-name" autocomplete="off" spellcheck="false" maxlength="20"
+                oninput="config.str_king = event.target.value.trim()" /></td>
+            </tr>
+            <tr><td>TODOetc</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <hr>
+      <div style="line-height: 1.2;">
+        <label for="elWordMap" style="vertical-align: top">Custom word expansions:</label>
+        <br/><small>case sensitive, one per line: </small>
+        <code class="faded">&lt;word&gt; &lt;expanded phrase&gt;</code>
+        <br/><small>e.g. "btw by the way"</code>
+        <br/>
+        <textarea id="elWordMap" name="elWordMap" rows="6" style="width: 40ch" autocomplete="off" spellcheck="false"
+          onchange="config.tts_word_map = parseTTSwordMap(event.target.value)"
+        ></textarea>
+      </div>
+    </div>
+  </div>
+<script>
+
+// testing lichess reading:
+if (0)
+(() => {
+  const LC = window.open('https://lichess.org/@/SimpleVar/tv')
+  window.addEventListener('message', e => {
+    if (e.origin !== 'https://lichess.org')
+      return
+    if (e.data === 'svTurn')
+      utter('ping')
+  })
+})()
+
+/*
+
+ MAIN FEATURES
+ [x] customizable prefix (can have empty prefix to apply on all msgs)
+ [x] each chatter can select own voice
+ [x] replaces links with a placeholder
+ [x] replaces custom words with phrases
+ [x] ignored users list
+ [x] knows to ignore twitch emotes
+ [x] supports listening on multiple channels
+ [x] knows to read chess notation properly
+
+ TODO
+ [x] tts - when reading names - ignore punctuation etcs
+ [x] import/export file
+ [x] configurable: checkbox no-help-from-chat mode - aka: hide any chess related term and notation from tts
+ [ ] pausable + delayed TTS queue, and listening to messagedeleted to respect AutoMod hiding msgs
+ [ ] add VIP status, VIPs only, who can customize category...
+ [ ] whitelist that supersedes the blacklist altogether when nonempty
+ [x] TTS notify 'hi' on joins - decided not to, it was weird (and batched every 30/60 seconds)
+ [x] config the '$name in the house' msg
+ [x] config to prefix msg with chatter name (consecutive msgs have the name omitted)
+ [x] getting redeem events info
+ [x] configurable ignored prefixes
+ [x] TTS ignore PGN or FEN
+ [x] comprehensively test chess notation tts
+ [x] interrupt speech button
+ [x] checkbox to support chess notation
+ [x] rate
+ [x] pitch
+ [x] minimum msg length to read
+ [x] maximum msg length
+ [x] sub-only mode
+ [x] max char repeat
+ [x] fix tts going to sleep (just tell the browser to not let this tab sleep)
+
+ */
+
+let config = {}
+let usernameOfLastMsg = ''
+
+//////////////// VOICES
+
+let TTS_ALL_VOICES = []
+let tts_voice = undefined
+let tts_voice_f = undefined
+let tts_voice_m = undefined
+const elDefaultVoice = document.getElementById('elDefaultVoice')
+const elFemaleVoice = document.getElementById('elFemaleVoice')
+const elMaleVoice = document.getElementById('elMaleVoice')
+elDefaultVoice.addEventListener('input', () => {
+  const name = elDefaultVoice.value
+  tts_voice = TTS_ALL_VOICES.find(x => x.name === name)
+  config.tts_default_voice_name = tts_voice?.name
+  speechSynthesis.cancel()
+  utter('new default voice selected')
+})
+elFemaleVoice.addEventListener('input', () => {
+  const name = elFemaleVoice.value
+  tts_voice_f = TTS_ALL_VOICES.find(x => x.name === name)
+  config.tts_female_voice_name = tts_voice_f?.name
+  speechSynthesis.cancel()
+  utter('new female voice selected')
+})
+elMaleVoice.addEventListener('input', () => {
+  const name = elMaleVoice.value
+  tts_voice_m = TTS_ALL_VOICES.find(x => x.name === name)
+  config.tts_male_voice_name = tts_voice_m?.name
+  speechSynthesis.cancel()
+  utter('new male voice selected')
+})
+speechSynthesis.onvoiceschanged = populateVoices
+populateVoices()
+function populateVoices() {
+  TTS_ALL_VOICES = speechSynthesis.getVoices()
+  elDefaultVoice.replaceChildren()
+  elFemaleVoice.replaceChildren()
+  elMaleVoice.replaceChildren()
+  function opt(v, t) {
+    const o = document.createElement('option')
+    o.value = v
+    o.innerText = t
+    return o
+  }
+  elDefaultVoice.append(opt('', 'none'))
+  elFemaleVoice.append(opt('', 'none'))
+  elMaleVoice.append(opt('', 'none'))
+  for (let i = 0; i < TTS_ALL_VOICES.length; i++) {
+    const name = TTS_ALL_VOICES[i].name
+    elDefaultVoice.append(opt(name, name))
+    elFemaleVoice.append(opt(name, name))
+    elMaleVoice.append(opt(name, name))
+  }
+  updateTTSvoice()
+  setTimeout(() => utter('.'), 1)
+}
+
+function onChangeRate(val) {
+  config.tts_rate = Math.min(3, Math.max(0.1, Number.isFinite(val) ? val : 1))
+  speechSynthesis.cancel()
+  utter('testing new TTS options')
+}
+function onChangePitch(val) {
+  config.tts_pitch = Math.min(2, Math.max(0, Number.isFinite(val) ? val : 1))
+  speechSynthesis.cancel()
+  utter('testing new TTS options')
+}
+
+let silence = false
+function utter(msg, voiceKIND = 0) {
+  if (silence)
+    return
+  if (!msg)
+    return
+  let V = undefined
+  switch (voiceKIND) {
+    case 0: V = tts_voice; break;
+    case 1: V = tts_voice_f; break;
+    case 2: V = tts_voice_m; break;
+    default: V = TTS_ALL_VOICES.find(x => x.name === voiceKIND); break;
+  }
+  V = V ?? tts_voice
+  if (!V) {
+    console.error('[ERR] no tts_voice object defined')
+    return
+  }
+  const utt = new SpeechSynthesisUtterance(msg)
+  utt.voice = V
+  utt.rate = config.tts_rate
+  utt.pitch = config.tts_pitch
+  utt.volume = config.volume / 100
+
+  // TODO : un-hack this lang hack
+  if (/[\u05d0-\u05ea]/.test(/[a-zA-Z\u05d0-\u05ea]/.exec(msg)?.[0] ?? '')) {
+    utt.lang = 'he'
+    utt.voice = TTS_ALL_VOICES.filter(x => x.name.includes('(Natural) - Hebrew'))[1]
+    utt.rate *= .9;
+  }
+  speechSynthesis.speak(utt)
+}
+
+////////////// CONFIG
+
+const elFilePicker = document.getElementById('elFilePicker')
+const elSubsOnly = document.getElementById('elSubsOnly')
+const elChannels = document.getElementById('elChannels')
+const elCustomPrefix = document.getElementById('elCustomPrefix')
+const elIgnoredPrefixes = document.getElementById('elIgnoredPrefixes')
+const elIgnoredUsers = document.getElementById('elIgnoredUsers')
+const elIgnoredUsersCount = document.getElementById('elIgnoredUsersCount')
+const elLinkPlaceholder = document.getElementById('elLinkPlaceholder')
+const elStrUserSays = document.getElementById('elStrUserSays')
+const elStrGreetOnJoin = document.getElementById('elStrGreetOnJoin')
+const elTTSrate = document.getElementById('elTTSrate')
+const elTTSpitch = document.getElementById('elTTSpitch')
+const elVolume = document.getElementById('elVolume')
+const elMsgLenMin = document.getElementById('elMsgLenMin')
+const elMsgLenMax = document.getElementById('elMsgLenMax')
+const elEnableChessNotation = document.getElementById('elEnableChessNotation')
+const elSilentChess = document.getElementById('elSilentChess')
+const elWordMap = document.getElementById('elWordMap')
+const elWhoCanCustomizeVoice = document.getElementById('elWhoCanCustomizeVoice')
+
+loadConfig()
+function loadConfig(externalConf = null) {
+  config = externalConf ?? JSON.parse(localStorage.getItem('config') ?? '{}')
+  config.subs_only_mode ??= false
+  config.channels ??= []
+  config.custom_prefix ??= '!!'
+  config.ignored_prefixes ??= ['!!!']
+  config.ignored_users ??= ['streamelements', 'streamlabs']
+  config.tts_link_placeholder ??= ', link ,'
+  config.tts_rate ??= 1
+  config.tts_pitch ??= 1
+  config.volume ??= 100
+  config.msg_len_min ??= 0
+  config.msg_len_max ??= 0
+  config.str_user_says ??= '$name says'
+  config.str_greet_on_join ??= 'welcome $name'
+  config.enable_chess_notation ??= false
+  config.silent_chess ??= false
+  config.tts_word_map ??= {}
+  config.tts_default_voice_name ??= 'Microsoft Zira - English (United States)'
+  config.tts_female_voice_name ??= 'Microsoft Zira - English (United States)'
+  config.tts_male_voice_name ??= 'Microsoft David - English (United States)'
+  config.who_can_customize_voice ??= 'S'
+
+  updateConfigUI()
+
+  elSaveLoadStatus.classList.remove('shown')
+  elSaveLoadStatus.innerText = 'Loaded'
+  void elSaveLoadStatus.offsetWidth // force reflow
+  elSaveLoadStatus.classList.add('shown')
+}
+function saveConfig() {
+  localStorage.setItem('config', JSON.stringify(config))
+
+  elSaveLoadStatus.classList.remove('shown')
+  elSaveLoadStatus.innerText = 'Saved'
+  void elSaveLoadStatus.offsetWidth // force reflow
+  elSaveLoadStatus.classList.add('shown')
+}
+function importConfig() {
+  elFilePicker.value = ''
+  elFilePicker.click()
+}
+function onFileSelected(e) {
+  const file = e.target.files[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = ev => {
+    let conf = undefined
+    try {
+      conf = JSON.parse(ev.target.result)
+    }
+    catch {
+      alert('failed to parse the imported configs file')
+    }
+    if (conf)
+      loadConfig(conf)
+  }
+  reader.readAsText(file)
+}
+function exportConfig() {
+  const file = new Blob([JSON.stringify(config)], {type: 'application/json'});
+  const filename = 'twTTS_config_' + new Date().toISOString().split('T', 1)
+  if (window.navigator.msSaveOrOpenBlob) {
+    // IE10+
+    window.navigator.msSaveOrOpenBlob(file, filename)
+    return
+  }
+  // Others
+  const a = document.createElement('a')
+  const url = URL.createObjectURL(file)
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  setTimeout(() => {
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+  }, 0)
+}
+
+function updateConfigUI() {
+  elSubsOnly.checked = !!config.subs_only_mode
+  elChannels.value = (config.channels ?? []).join(' ')
+  elCustomPrefix.value = config.custom_prefix ?? ''
+  elIgnoredPrefixes.value = (config.ignored_prefixes ?? []).join(' ')
+  elIgnoredUsers.value = (config.ignored_users ?? []).join('\n')
+  elIgnoredUsersCount.innerText = config.ignored_users?.length ?? 0
+  elLinkPlaceholder.value = config.tts_link_placeholder
+  elStrUserSays.value = config.str_user_says
+  elStrGreetOnJoin.value = config.str_greet_on_join
+  elTTSrate.value = config.tts_rate
+  elTTSpitch.value = config.tts_pitch
+  elVolume.value = config.volume
+  elMsgLenMin.value = config.msg_len_min
+  elMsgLenMax.value = config.msg_len_max
+  document.body.className = config.enable_chess_notation ? 'ecn-on' : ''
+  elEnableChessNotation.checked = !!config.enable_chess_notation
+  elSilentChess.checked = !!config.silent_chess
+  elWordMap.value = Object.keys(config.tts_word_map)
+    .map(k => k + ' ' + config.tts_word_map[k])
+    .join('\n')
+  elWhoCanCustomizeVoice.value = config.who_can_customize_voice
+  updateTTSvoice()
+}
+function updateTTSvoice() {
+  if (elDefaultVoice.value !== config.tts_default_voice_name) {
+    const name = elDefaultVoice.value = config.tts_default_voice_name ?? ''
+    tts_voice = TTS_ALL_VOICES.find(x => x.name === name)
+  }
+  if (elFemaleVoice.value !== config.tts_female_voice_name) {
+    const name = elFemaleVoice.value = config.tts_female_voice_name ?? ''
+    tts_voice_f = TTS_ALL_VOICES.find(x => x.name === name)
+  }
+  if (elMaleVoice.value !== config.tts_male_voice_name) {
+    const name = elMaleVoice.value = config.tts_male_voice_name ?? ''
+    tts_voice_m = TTS_ALL_VOICES.find(x => x.name === name)
+  }
+}
+function getUserSaysText(name) {
+  if (usernameOfLastMsg === name) return ''
+  usernameOfLastMsg = name
+  return config.str_user_says?.replace('$name', name) || ''
+}
+function parseTTSwordMap(s) {
+  const newMap = {}
+  for (const line of s.split('\n')) {
+    const x = line.trim().split(' ')
+    const key = x.shift()
+    if (!key || key.includes(' '))
+      continue
+    newMap[key] = x.join(' ')
+  }
+  return newMap
+}
+
+///////////// VIEWERS DATA
+
+const custom_voice_users = JSON.parse(localStorage.getItem('custom_voice_users') ?? '{}')
+function setUserVoice(user, voice) {
+  console.log('setting voice ' + voice + ' to user: ' + user)
+  if (voice === 0)
+    delete custom_voice_users[user]
+  else
+    custom_voice_users[user] = voice
+  localStorage.setItem('custom_voice_users', JSON.stringify(custom_voice_users))
+}
+
+///////////// TWITCH CHAT adhoc
+
+// redeems -> TTS
+const chatChannel = config.channels[0]
+if (chatChannel) {
+  const chatURL = 'https://www.twitch.tv/popout/' + chatChannel + '/chat'
+  const chatWindow = window.open(chatURL, 'myChatRedeemPinger',
+    'width=214,height=740,directories=no,titlebar=no,toolbar=no,location=no,status=no,menubar=no,scrollbars=no,resizable=no,popup=1')
+  window.addEventListener('beforeunload', () => {
+    chatWindow.close()
+  })
+  window.addEventListener('message', e => {
+    console.log(e)
+    if (e.data?.ev === 'redeem') {
+      if (!e.data.kind.startsWith('Sound') && e.data.kind !== 'Japan') utter(fixChatterNameForTTS(e.data.user) + ' redeemed ' + e.data.kind)
+    }
+    else if (e.data?.ev === 'raid') {
+      utter(fixChatterNameForTTS(e.data.user) + ' raided ' + e.data.raiders)
+    }
+  })
+}
+
+///////////// TWITCH CHAT
+
+console.log('Connecting to channels: ', config.channels)
+const client = new tmi.Client({channels: [...config.channels], connection: {secure: true, reconnect: true}})
+client.connect()
+client.on('connected', () => { console.log('=== TW connected at ' + (new Date().toLocaleTimeString())) })
+client.on('disconnected', reason => { console.log( '=== TW disconnected: ' + reason + ' at ' + (new Date().toLocaleTimeString())) })
+client.on('message', (channel, tags, msg, self) => {
+  if (self)
+    return
+  // remove the @name for msgs that reply to a thread thingy
+  if (tags['reply-parent-display-name']) {
+    const si = msg.indexOf(' ')
+    if (si >= 0) msg = msg.substring(si+1)
+  }
+  if (msg.startsWith('!ttsvoice ')) {
+    msg = msg.substring(9).trim()
+    // a roundabout way of making sure (+n).toStr()===n , and that n is 0-2
+    let voiceKind = [0, 1, 2][msg];
+    if (voiceKind === undefined) {
+      if (msg.length < 4)
+        voiceKind = 0
+      else {
+        // check if the entire msg is a known voice in the array TTS_ALL_VOICES
+        const name = msg.toLowerCase()
+        voiceKind = (TTS_ALL_VOICES.find(x => x.name.toLowerCase() === name)
+          ?? TTS_ALL_VOICES.find(x => x.name.toLowerCase().includes(name)))?.name ?? 0
+      }
+    }
+    setUserVoice(tags['display-name'].toLowerCase(), voiceKind)
+    return
+  }
+  const isMod = tags.mod || tags.badges?.broadcaster
+  if (isMod) {
+    if (msg.startsWith('!sh')) {
+      speechSynthesis.cancel()
+      return
+    }
+    if (msg.startsWith('!ttson')) {
+      silence = false
+      return
+    }
+    if (msg.startsWith('!ttsoff')) {
+      silence = true
+      return
+    }
+  }
+  const isSub = tags.subscriber || tags.mod
+  if (config.subs_only_mode && !isSub)
+    return
+  if (config.msg_len_min > 0 && msg.length < config.msg_len_min)
+    return
+  if (config.msg_len_max > 0 && msg.length > config.msg_len_max)
+    return
+  if (config.custom_prefix && !msg.startsWith(config.custom_prefix))
+    return
+  if (config.ignored_prefixes.some(x => msg.startsWith(x)))
+    return
+  let chatter = tags['display-name']
+  const id = chatter.toLowerCase()
+  if (config.ignored_users.includes(id))
+    return
+  
+  let userVoice = 0
+  if (({'E': true, 'S': isSub})[config.who_can_customize_voice]) {
+    userVoice = custom_voice_users[id] ?? 0
+  }
+  console.log(tags, msg)
+  chatter = fixChatterNameForTTS(chatter)
+  const prefix = tags['first-msg']
+    ? 'first message by ' + chatter + ' .'
+    : getUserSaysText(chatter)
+  const fixedMsg = fixMsgForTTS(msg, tags.emotes)
+  if (fixedMsg)
+    utter(prefix + ' ' + fixedMsg, userVoice)
+})
+
+function fixChatterNameForTTS(name) {
+  // remove punctuation
+  name = name.replace(/[`~!@#$%^&*()\-=_0-9;:'"<>/\\,?.]+/g, '')
+  return cleanRepeatingChars(name)
+}
+
+let chessMoveLongPause = false
+function fixMsgForTTS(msg, emotes) {
+  // detect links
+  if (config.tts_link_placeholder) {
+    msg = msg.replace(/((https?:\/\/(www\.)?)|(www\.)|(\w+\.\w+\/\w))[^ ]+/gi, config.tts_link_placeholder)
+  }
+  if (config.enable_chess_notation) {
+    // dont read entire PGNs
+    if (msg.match(/((\d+\.(\.\.)?(\s?(([PNBRKQ][a-h]?|[a-h])[1-8]?((x[PNBRKQ])?[a-h]?[1-8]?)?(=[NBRQnbrq])?|O-O(-O)?|0-0(-0)?)(\?[?!]?|!!?)?(\+\+?|#)?\s?({[^}]*})?){1,2})\s?){3}/))
+      return
+    // dont read entire FENs
+    msg = msg.replace(/([pnbrqk1-8]+\/){7}[pnbrqk1-8]+\s+[bw]\s+(-|[kq]{1,4})((\s+(-|[a-h][36]?))?(\s+\d+?(\s+\d+)?)?)?/gi, ', fen ,')
+  }
+  chessMoveLongPause = false
+  let nativeNumbers = msg.toLowerCase().startsWith('<native numbers>');
+  if (nativeNumbers) msg = msg.slice('<native numbers>'.length)
+  // TODO configable
+  // these emotes we want to hear:
+  // 25 Kappa
+  // 1902 Keepo
+  // 55338 KappaPride
+  emotes = emotes ?? {}
+  ;[25, 1902, 55338].forEach(x => { if (emotes[x]) delete emotes[x] });
+  // clean emotes
+  const badStarts = Object.values(emotes).flatMap(e => e.map(ei => +(ei.split('-',1)[0])))
+  badStarts.sort((a,b)=>a-b)
+  // user defined word maps
+  let i = 0
+  let badStartIdx = 0
+  msg = msg.split(' ')
+    .filter(w => {
+      const good = i !== badStarts[badStartIdx]
+      i += w.length + 1
+      if (!good) badStartIdx++
+      return good// && !w.startsWith('@')
+    })
+    .map(w => {
+      if (w[0] === '@' && w.length > 1) {
+        return fixChatterNameForTTS(w.substring(1))
+      }
+      let repl = config.tts_word_map.hasOwnProperty(w) && config.tts_word_map[w]
+      // consider empty replacement to be 'truthy' (exists)
+      if (repl || repl === '') return repl
+      // trim punctuations from start or end
+      const cleanerW = w.replace(/^[?!\-,.;:[\]\(\)\{\}*&^%$#@~`'"<>/\\_=+]+|[?!\-,.;:[\]\(\)\{\}*&^%$#@~`'"<>/\\_=+]+$/g, '')
+      repl = config.tts_word_map[cleanerW]
+      if (repl || repl === '') return w.replace(cleanerW, repl)
+      // no replacement:
+      return cleanRepeatingChars(cleanNumbers(config.enable_chess_notation ? sanitizeChessMoveForTTS(w) : w, nativeNumbers))
+    })
+    .join(' ').trim()
+  // final hacks
+  msg = msg.replace(/<-+/g, ' , left arrow , ')
+  msg = msg.replace(/-+>/g, ' , to ')
+  msg = msg.replace(/<[<\s]*/g, ' less than ')
+  msg = msg.replace(/>[>\s]*/g, ' greater than ')
+  // don't speak emojis
+  msg = msg.replace(/[\p{C}\p{So}\u{1F3FB}-\u{1F3FF}]+/gu, '') // C (control) , So (symbol other - emojis) , 1F3FB .. 1F3FF (emoji modifiers)
+  return msg.trim()
+}
+
+const simpleNumbers = {
+  '0': '',
+  '1': 'one',
+  '2': 'two',
+  '3': 'three',
+  '4': 'four',
+  '5': 'five',
+  '6': 'six',
+  '7': 'seven',
+  '8': 'eight',
+  '9': 'nine',
+};
+function numberTwoWideToHumanStr(str, isThousands) {
+  if (str === '00') return ''
+  if (str[0] === '0') return simpleNumbers[str[1]] + (isThousands ? ' hundred ' : '')
+  switch (str) {
+    case '10': return isThousands ? ' one thousand ' : ' ten '
+    case '11': return ' eleven' + (isThousands ? ' hundred ' : '')
+    case '12': return ' twelve' + (isThousands ? ' hundred ' : '')
+    case '13': return ' thirteen' + (isThousands ? ' hundred ' : '')
+    case '14': return ' fourteen' + (isThousands ? ' hundred ' : '')
+    case '15': return ' fifteen' + (isThousands ? ' hundred ' : '')
+    case '16': return ' sixteen' + (isThousands ? ' hundred ' : '')
+    case '17': return ' seventeen' + (isThousands ? ' hundred ' : '')
+    case '18': return ' eighteen' + (isThousands ? ' hundred ' : '')
+    case '19': return ' nineteen' + (isThousands ? ' hundred ' : '')
+  }
+  switch (str[0]) {
+    case '2': return isThousands && str[1] === '0' ? simpleNumbers[str[0]] + ' thousand ' : ' twenty ' + simpleNumbers[str[1]]  + (isThousands ? ' hundred ' : '')
+    case '3': return isThousands && str[1] === '0' ? simpleNumbers[str[0]] + ' thousand ' : ' thirty ' + simpleNumbers[str[1]]  + (isThousands ? ' hundred ' : '')
+    case '4': return isThousands && str[1] === '0' ? simpleNumbers[str[0]] + ' thousand ' : ' forty ' + simpleNumbers[str[1]]   + (isThousands ? ' hundred ' : '')
+    case '5': return isThousands && str[1] === '0' ? simpleNumbers[str[0]] + ' thousand ' : ' fifty ' + simpleNumbers[str[1]]   + (isThousands ? ' hundred ' : '')
+    case '6': return isThousands && str[1] === '0' ? simpleNumbers[str[0]] + ' thousand ' : ' sixty ' + simpleNumbers[str[1]]   + (isThousands ? ' hundred ' : '')
+    case '7': return isThousands && str[1] === '0' ? simpleNumbers[str[0]] + ' thousand ' : ' seventy ' + simpleNumbers[str[1]] + (isThousands ? ' hundred ' : '')
+    case '8': return isThousands && str[1] === '0' ? simpleNumbers[str[0]] + ' thousand ' : ' eighty ' + simpleNumbers[str[1]]  + (isThousands ? ' hundred ' : '')
+    case '9': return isThousands && str[1] === '0' ? simpleNumbers[str[0]] + ' thousand ' : ' ninety ' + simpleNumbers[str[1]]  + (isThousands ? ' hundred ' : '')
+  }
+  console.error('something is funky', str)
+  return str
+}
+
+function cleanNumbers(word, uhActuallyDont) {
+  if (uhActuallyDont)
+   return word
+  const res = word.replace(/(?<sign>(^[+\-])?)((?<bin>0b[01]+)|(?<hex>0x[0-9a-fA-F]+)|(?<float>\d*\.\d+)|(?<int>\d+(e[+\-]?\d+)?))/g, (...args) => {
+    const groups = args[args.length - 1]
+    if (groups.bin) return ' binary number '
+    if (groups.hex) return ' hexa number '
+
+    const signStr = ({ '-': ' minus ', '+': ' plus ' })[groups.sign] || ''
+    const name = signStr + ' number '
+    const num = parseFloat(groups.float || groups.int)
+    if (num > 1e15) return ' very large ' + name
+    if (num !== 0 && num < 1e-15) return ' very small ' + name
+    if (num !== 0 && num < 1e-4) return ' small ' + name
+
+    let [intPart, fractPart] = num.toFixed(num < 1 ? 4 : 2).replace(/(\.0)?0+$/, '').split('.')
+    let numStr = ''
+    let n = +intPart
+    if (n >= 10000) return ' large ' + name
+    // A0CD -> A thousand CD
+    // AXCD -> AX hundred CD
+    //   0D -> D
+    //   XD -> X-ty D
+    // finally, '' -> zero
+    if (n > 0) {
+      let fourWide = (n + '').padStart(4, '0')
+      numStr = numberTwoWideToHumanStr(fourWide.slice(0, 2), true) + numberTwoWideToHumanStr(fourWide.slice(2, 4))
+    }
+    if (fractPart) numStr += ' point ' + [...fractPart].map(c => simpleNumbers[c] || 'zero').join(' ')
+    return ' ' + signStr + (numStr || 'zero') + ' ' // dont add comma, because '32 units' will be read as '32, units' and thats weird
+  })
+  if (word !== res)
+    console.log('cleanNumber: ', word, ' --> ', res)
+  return res
+}
+
+function cleanRepeatingChars(word) {
+  // TODO? config REPEAT_LEN min=3
+  return word.replace(/(\D)\1{3,}/gi, match => match.slice(0, 4))
+}
+
+// operates on a single move e.g. 'R1xa8+' becomes 'Rook 1 takes a 8 check,'
+function sanitizeChessMoveForTTS(word) {
+  if (word.length < 2) {
+    chessMoveLongPause = false
+    return word
+  }
+  const cm = parseChessMove(word)
+  if (config.silent_chess && cm) return ''
+  if (cm) {
+    chessMoveLongPause = !chessMoveLongPause
+    return cm
+  }
+  chessMoveLongPause = false
+  return word
+}
+
+/////////// Chess Notation
+
+const CHESS_FILE_PRONOUNCE = {
+  'a': 'A',
+  'b': 'bee',
+  'c': 'see',
+  'd': 'D',
+  'e': 'E',
+  'f': 'F',
+  'g': 'G',
+  'h': 'H',
+}
+const CHESS_RANK_PRONOUNCE = {
+  '1': 'one',
+  '2': 'two',
+  '3': 'three',
+  '4': 'four',
+  '5': 'five',
+  '6': 'six',
+  '7': 'seven',
+  '8': 'eight',
+}
+const CHESS_PIECE_NAMES = {
+  'p': 'pawn ',
+  'P': 'Pawn ',
+  'n': 'knight ',
+  'N': 'Knight ',
+  // no 'b' - that's a File
+  'B': 'Bishop ',
+  'r': 'rook ',
+  'R': 'Rook ',
+  'q': 'queen ',
+  'Q': 'Queen ',
+  'k': 'king ',
+  'K': 'King ',
+}
+
+function parseChessMove(word) {
+  // ; <chessMove-base> (+|++|#)? (?|!){0,2}
+  let s = {i: 0}
+  // skip punctuation so it "fully parses" the chess move
+  while ('?!,.()[]'.includes(word[s.i]))
+    s.i++
+  // include numbered move in the leading speak "5.Be2"
+  if (word[s.i] >= '0' && word[s.i] <= '9') {
+    let j = s.i + 1
+    while (j < word.length && word[j] >= '0' && word[j] <= '9')
+      j++
+    if (word[j] !== '.')
+      return // no period - no move
+    s.i = j+1
+  }
+  const leadingSpeak = word.substring(0, s.i)
+  const move = parseChessMove_base(word, s)
+  if (!move)
+    return
+  switch (word[s.i]) {
+    case '#':
+      s.i++
+      move.push('checkmate')
+      break
+    case '+':
+      s.i++
+      if (word[s.i] === '+') {
+        s.i++
+        move.push('double check')
+      }
+      else
+        move.push('check')
+      break
+  }
+
+  switch (word[s.i]) { case '?': case '!': move.push(word[s.i++]); break; }
+  switch (word[s.i]) { case '?': case '!': move.push(word[s.i++]); break; }
+
+  //const moveStr = word.substring(0, s.i).toLowerCase()
+
+  // properly terminated move notation, but not fully parsed - speak the unused text normally
+  let trailingSpeak = ''
+  if (/[^a-zA-Z0-9]/.test(word[s.i]))
+    trailingSpeak = word.substring(s.i)
+  else if (s.i < word.length) // parsed the entire thing? Na3hi
+    return
+
+  return leadingSpeak + move.join(' ') + (chessMoveLongPause ? ' , . , ' : ' , ') + trailingSpeak
+}
+function parseChessMove_base(word, s) {
+  // ; <posid> x? <posid>?
+  // | [a-h](1|8)=[PNBRQKpnbrqk]
+  const src = parseChessPosId(word, s)
+  if (!src)
+    return
+  const takes = word[s.i] === 'x'
+  if (takes)
+    s.i++
+  const dst = parseChessPosId(word, s)
+  let promStr = ''
+  if (word[s.i] === '=') {
+    s.i++
+    const c = word[s.i++]
+    const prom = CHESS_PIECE_NAMES[c === 'b' ? 'B' : c]
+    if (prom)
+      promStr = 'becomes ' + prom
+  }
+
+  // validate the data is a proper actual chess move...
+
+  if (takes && (!src || !dst))
+    return
+
+  if (!takes && dst && !src.piece)
+    return
+
+  // no take and no numbers is always Bad - Nah, Bah, Kha, ac, dc
+  if (!takes && !src.coord?.rank && !dst?.coord?.rank)
+    return
+
+  // simple move - coords must be full, avoids B7 k1
+  if (!dst && !(src.coord?.file && src.coord?.rank))
+    return
+
+  // incomplete coordinates require the piece to be Capitalized
+  if (!takes && src.piece) {
+    const isFullSrc = src.coord?.file && src.coord?.rank
+    const isFullDst = dst?.coord?.file && dst?.coord?.rank
+    if (!isFullSrc && !isFullDst && src.piece[0] === src.piece[0].toLowerCase())
+      return
+  }
+
+  return [
+    src.piece, CHESS_FILE_PRONOUNCE[src.coord?.file], CHESS_RANK_PRONOUNCE[src.coord?.rank],
+    takes ? ' takes ' : '',
+    dst?.piece, CHESS_FILE_PRONOUNCE[dst?.coord?.file], CHESS_RANK_PRONOUNCE[dst?.coord?.rank],
+    promStr
+  ]
+}
+function parseChessPosId(word, s) {
+  // ; <pieceName> <coord>?
+  // | <coord>
+
+  const piece = (word[s.i] === 'b' && (word[s.i+1] >= 'a' && word[s.i+1] <= 'h'))
+    ? 'bishop' : CHESS_PIECE_NAMES[word[s.i]]
+  if (piece)
+    s.i++
+  
+  const coord = parseCoord(word, s)
+  if (!piece && !coord)
+    return
+  return {piece, coord}
+}
+function parseCoord(word, s) {
+  // ; [a-h]? [1-8]?
+  let file = undefined
+  let rank = undefined
+  if (word[s.i] >= 'a' && word[s.i] <= 'h')
+    file = word[s.i++]
+  if (word[s.i] >= '1' && word[s.i] <= '8')
+    rank = word[s.i++]
+  if (!file && !rank)
+    return
+  return {file, rank}
+}
+
+</script>
+<script src="./the_zulu_test_suite.js"></script>
+</body>
+</html>
