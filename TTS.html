@@ -656,7 +656,7 @@ client.connect()
 client.on('connected', () => { console.log('=== TW connected at ' + (new Date().toLocaleTimeString())) })
 client.on('disconnected', reason => { console.log( '=== TW disconnected: ' + reason + ' at ' + (new Date().toLocaleTimeString())) })
 client.on('message', (channel, tags, msg, self) => {
-  if (self)
+  if (self || tags['first-msg'])
     return
   // remove the @name for msgs that reply to a thread thingy
   if (tags['reply-parent-display-name']) {
@@ -702,8 +702,11 @@ client.on('message', (channel, tags, msg, self) => {
     return
   if (config.msg_len_max > 0 && msg.length > config.msg_len_max)
     return
-  if (config.custom_prefix && !msg.startsWith(config.custom_prefix))
-    return
+  if (config.custom_prefix) {
+    if (!msg.startsWith(config.custom_prefix))
+      return
+    msg = msg.substring(config.custom_prefix.length)
+  }
   if (config.ignored_prefixes.some(x => msg.startsWith(x)))
     return
   let chatter = tags['display-name']
@@ -735,7 +738,7 @@ let chessMoveLongPause = false
 function fixMsgForTTS(msg, emotes) {
   // detect links
   if (config.tts_link_placeholder) {
-    msg = msg.replace(/((https?:\/\/(www\.)?)|(www\.)|(\w+\.\w+\/\w))[^ ]+/gi, config.tts_link_placeholder)
+    msg = msg.replace(/((https?:\/\/(www\.)?)|(www\.)|([a-zA-Z_]\w*\.[a-zA-Z_]\w*\/\w)|(\d{1,3}(\.\d{1,3}){3}))[^ ]*/gi, config.tts_link_placeholder)
   }
   if (config.enable_chess_notation) {
     // dont read entire PGNs
@@ -804,46 +807,67 @@ const simpleNumbers = {
   '8': 'eight',
   '9': 'nine',
 };
-function numberTwoWideToHumanStr(str, isThousands) {
-  if (str === '00') return ''
-  if (str[0] === '0') return simpleNumbers[str[1]] + (isThousands ? ' hundred ' : '')
+const ordinalNumbers = {
+  '0': '',
+  '1': 'first',
+  '2': 'second',
+  '3': 'third',
+  '4': 'fourth',
+  '5': 'fifth',
+  '6': 'sixth',
+  '7': 'seventh',
+  '8': 'eighth',
+  '9': 'ninth',
+};
+function numberTwoWideToHumanStr(str, isThousands, ordinal, and) {
+  const nums = isThousands || ordinal === -1 ? simpleNumbers : ordinalNumbers
+  let ordinalStr = ''
+  switch (ordinal) {
+    case 0: ordinalStr = 'th'; break
+    case 1: ordinalStr = 'st'; break
+    case 2: ordinalStr = 'nd'; break
+    case 3: ordinalStr = 'rd'; break
+  }
+  if (str === '00') return isThousands ? '' : ordinalStr
+  and = and ? ' and ' : ''
+  if (str[0] === '0') return and + (isThousands ? simpleNumbers[str[1]] + ' hundred' + ordinalStr : nums[str[1]])
   switch (str) {
-    case '10': return isThousands ? ' one thousand ' : ' ten '
-    case '11': return ' eleven' + (isThousands ? ' hundred ' : '')
-    case '12': return ' twelve' + (isThousands ? ' hundred ' : '')
-    case '13': return ' thirteen' + (isThousands ? ' hundred ' : '')
-    case '14': return ' fourteen' + (isThousands ? ' hundred ' : '')
-    case '15': return ' fifteen' + (isThousands ? ' hundred ' : '')
-    case '16': return ' sixteen' + (isThousands ? ' hundred ' : '')
-    case '17': return ' seventeen' + (isThousands ? ' hundred ' : '')
-    case '18': return ' eighteen' + (isThousands ? ' hundred ' : '')
-    case '19': return ' nineteen' + (isThousands ? ' hundred ' : '')
+    case '10': return and + (isThousands ? ' one thousand' : ' ten' + ordinalStr)
+    case '11': return and + ' eleven' + (isThousands ? ' hundred' : (ordinalStr ? 'th' : ''))
+    case '12': return and + ' twelve' + (isThousands ? ' hundred' : (ordinalStr ? 'th' : ''))
+    case '13': return and + ' thirteen' + (isThousands ? ' hundred' : (ordinalStr ? 'th' : ''))
+    case '14': return and + ' fourteen' + (isThousands ? ' hundred' : (ordinalStr ? 'th' : ''))
+    case '15': return and + ' fifteen' + (isThousands ? ' hundred' : (ordinalStr ? 'th' : ''))
+    case '16': return and + ' sixteen' + (isThousands ? ' hundred' : (ordinalStr ? 'th' : ''))
+    case '17': return and + ' seventeen' + (isThousands ? ' hundred' : (ordinalStr ? 'th' : ''))
+    case '18': return and + ' eighteen' + (isThousands ? ' hundred' : (ordinalStr ? 'th' : ''))
+    case '19': return and + ' nineteen' + (isThousands ? ' hundred' : (ordinalStr ? 'th' : ''))
   }
   switch (str[0]) {
-    case '2': return isThousands && str[1] === '0' ? simpleNumbers[str[0]] + ' thousand ' : ' twenty ' + simpleNumbers[str[1]]  + (isThousands ? ' hundred ' : '')
-    case '3': return isThousands && str[1] === '0' ? simpleNumbers[str[0]] + ' thousand ' : ' thirty ' + simpleNumbers[str[1]]  + (isThousands ? ' hundred ' : '')
-    case '4': return isThousands && str[1] === '0' ? simpleNumbers[str[0]] + ' thousand ' : ' forty ' + simpleNumbers[str[1]]   + (isThousands ? ' hundred ' : '')
-    case '5': return isThousands && str[1] === '0' ? simpleNumbers[str[0]] + ' thousand ' : ' fifty ' + simpleNumbers[str[1]]   + (isThousands ? ' hundred ' : '')
-    case '6': return isThousands && str[1] === '0' ? simpleNumbers[str[0]] + ' thousand ' : ' sixty ' + simpleNumbers[str[1]]   + (isThousands ? ' hundred ' : '')
-    case '7': return isThousands && str[1] === '0' ? simpleNumbers[str[0]] + ' thousand ' : ' seventy ' + simpleNumbers[str[1]] + (isThousands ? ' hundred ' : '')
-    case '8': return isThousands && str[1] === '0' ? simpleNumbers[str[0]] + ' thousand ' : ' eighty ' + simpleNumbers[str[1]]  + (isThousands ? ' hundred ' : '')
-    case '9': return isThousands && str[1] === '0' ? simpleNumbers[str[0]] + ' thousand ' : ' ninety ' + simpleNumbers[str[1]]  + (isThousands ? ' hundred ' : '')
+    case '2': return and + (isThousands && str[1] === '0' ? nums[str[0]] + ' thousand' : ' twenty ' + nums[str[1]]  + (isThousands ? ' hundred' : '')) + (str[1] === '0' ? ordinalStr : '')
+    case '3': return and + (isThousands && str[1] === '0' ? nums[str[0]] + ' thousand' : ' thirty ' + nums[str[1]]  + (isThousands ? ' hundred' : '')) + (str[1] === '0' ? ordinalStr : '')
+    case '4': return and + (isThousands && str[1] === '0' ? nums[str[0]] + ' thousand' : ' forty ' + nums[str[1]]   + (isThousands ? ' hundred' : '')) + (str[1] === '0' ? ordinalStr : '')
+    case '5': return and + (isThousands && str[1] === '0' ? nums[str[0]] + ' thousand' : ' fifty ' + nums[str[1]]   + (isThousands ? ' hundred' : '')) + (str[1] === '0' ? ordinalStr : '')
+    case '6': return and + (isThousands && str[1] === '0' ? nums[str[0]] + ' thousand' : ' sixty ' + nums[str[1]]   + (isThousands ? ' hundred' : '')) + (str[1] === '0' ? ordinalStr : '')
+    case '7': return and + (isThousands && str[1] === '0' ? nums[str[0]] + ' thousand' : ' seventy ' + nums[str[1]] + (isThousands ? ' hundred' : '')) + (str[1] === '0' ? ordinalStr : '')
+    case '8': return and + (isThousands && str[1] === '0' ? nums[str[0]] + ' thousand' : ' eighty ' + nums[str[1]]  + (isThousands ? ' hundred' : '')) + (str[1] === '0' ? ordinalStr : '')
+    case '9': return and + (isThousands && str[1] === '0' ? nums[str[0]] + ' thousand' : ' ninety ' + nums[str[1]]  + (isThousands ? ' hundred' : '')) + (str[1] === '0' ? ordinalStr : '')
   }
-  console.error('something is funky', str)
+  console.error('something is funky', str, isThousands, ordinal, and)
   return str
 }
 
 function cleanNumbers(word, uhActuallyDont) {
   if (uhActuallyDont)
    return word
-  const res = word.replace(/(?<sign>(^[+\-])?)((?<bin>0b[01]+)|(?<hex>0x[0-9a-fA-F]+)|(?<float>\d*\.\d+)|(?<int>\d+(e[+\-]?\d+)?))/g, (...args) => {
+  const res = word.replace(/(?<![a-zA-Z])(?<sign>(^[+\-])?)((?<bin>0b[01]+)|(?<hex>0x[0-9a-fA-F]+)|(?<float>\d*(,\d\d\d)*\.\d+)|(?<int>\d+(,\d\d\d)*(e[+\-]?\d+)?))(?<ordinal>st|nd|rd|th|ST|ND|RD|TH)?(?![a-zA-Z])/g, (...args) => {
     const groups = args[args.length - 1]
     if (groups.bin) return ' binary number '
     if (groups.hex) return ' hexa number '
 
     const signStr = ({ '-': ' minus ', '+': ' plus ' })[groups.sign] || ''
     const name = signStr + ' number '
-    const num = parseFloat(groups.float || groups.int)
+    const num = parseFloat((groups.float || groups.int).replaceAll(',', ''))
     if (num > 1e15) return ' very large ' + name
     if (num !== 0 && num < 1e-15) return ' very small ' + name
     if (num !== 0 && num < 1e-4) return ' small ' + name
@@ -852,17 +876,33 @@ function cleanNumbers(word, uhActuallyDont) {
     let numStr = ''
     let n = +intPart
     if (n >= 10000) return ' large ' + name
-    // A0CD -> A thousand CD
-    // AXCD -> AX hundred CD
+    let ordinal = -1
+    let postfix = ''
+    if (!fractPart) {
+      let lastDigit = n % 10
+      switch (groups.ordinal) {
+        case 'st': case 'ST': if (lastDigit === 1) ordinal = 1; else postfix = ' ' + groups.ordinal; break
+        case 'nd': case 'ND': if (lastDigit === 2) ordinal = 2; else postfix = ' ' + groups.ordinal; break
+        case 'rd': case 'RD': if (lastDigit === 3) ordinal = 3; else postfix = ' ' + groups.ordinal; break
+        case 'th': case 'TH': if (lastDigit === 0 || lastDigit > 3 || (((n / 10) | 0) % 10) === 1) ordinal = 0; else postfix = ' ' + groups.ordinal; break
+      }
+    }
+    // A0CD -> A thousand and CD
+    // AXCD -> AX hundred and CD
     //   0D -> D
     //   XD -> X-ty D
     // finally, '' -> zero
     if (n > 0) {
       let fourWide = (n + '').padStart(4, '0')
-      numStr = numberTwoWideToHumanStr(fourWide.slice(0, 2), true) + numberTwoWideToHumanStr(fourWide.slice(2, 4))
+      numStr = numberTwoWideToHumanStr(fourWide.slice(0, 2), true, -1, false)
+      let lastPair = numberTwoWideToHumanStr(fourWide.slice(2, 4), false, ordinal, numStr)
+      if (numStr && lastPair && lastPair.length > 2) numStr += ' ' // lastPair could be just the ordinal string 'th' 'st' 'nd' 'rd'
+      if (lastPair && lastPair.endsWith('ty th')) lastPair = lastPair.substring(0, lastPair.length - 'ty th'.length) + 'tieth'
+      numStr += lastPair
+      numStr = numStr.replaceAll('twelveth', 'twelfth')
     }
     if (fractPart) numStr += ' point ' + [...fractPart].map(c => simpleNumbers[c] || 'zero').join(' ')
-    return ' ' + signStr + (numStr || 'zero') + ' ' // dont add comma, because '32 units' will be read as '32, units' and thats weird
+    return signStr + (numStr || (ordinal === 0 ? 'zeroth' : 'zero')).trim() + postfix + ' '
   })
   if (word !== res)
     console.log('cleanNumber: ', word, ' --> ', res)
@@ -1054,6 +1094,5 @@ function parseCoord(word, s) {
 }
 
 </script>
-<script src="./the_zulu_test_suite.js"></script>
 </body>
 </html>
