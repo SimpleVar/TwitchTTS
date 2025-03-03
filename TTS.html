@@ -723,7 +723,7 @@ client.on('message', (channel, tags, msg, self) => {
   const prefix = tags['first-msg']
     ? 'first message by ' + chatter + ' .'
     : getUserSaysText(chatter)
-  const fixedMsg = fixMsgForTTS(msg, tags.emotes)
+  const fixedMsg = fixMsgForTTS(msg, tags.emotes, tags['reply-parent-user-login'])
   if (fixedMsg)
     utter(prefix + ' ' + fixedMsg, userVoice)
 })
@@ -735,7 +735,7 @@ function fixChatterNameForTTS(name) {
 }
 
 let chessMoveLongPause = false
-function fixMsgForTTS(msg, emotes) {
+function fixMsgForTTS(msg, emotes, nameOfChatterThatThisMsgIsAReplyTo) {
   // detect links
   if (config.tts_link_placeholder) {
     msg = msg.replace(/((https?:\/\/(www\.)?)|(www\.)|([a-zA-Z_]\w*\.[a-zA-Z_]\w*\/\w)|(\d{1,3}(\.\d{1,3}){3}))[^ ]*/gi, config.tts_link_placeholder)
@@ -759,7 +759,13 @@ function fixMsgForTTS(msg, emotes) {
   ;[25, 1902, 55338].forEach(x => { if (emotes[x]) delete emotes[x] });
   // clean emotes
   const badStarts = Object.values(emotes).flatMap(e => e.map(ei => +(ei.split('-',1)[0])))
-  badStarts.sort((a,b)=>a-b)
+  badStarts.sort((a, b) => a - b)
+  // twitch api returns incorrect indices when the message is a reply, and the offset is consistently -(2 + the length of nameOfChatterThatThisMsgIsAReplyTo)
+  if (nameOfChatterThatThisMsgIsAReplyTo) {
+    const offset = nameOfChatterThatThisMsgIsAReplyTo.length + 2;
+    for (let i = 0; i < badStarts.length; i++)
+      badStarts[i] -= offset;
+  }
   // user defined word maps
   let i = 0
   let badStartIdx = 0
