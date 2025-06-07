@@ -127,7 +127,7 @@
         <small>space/comma separated (only takes effect after refresh)</small>
         <input id="elChannels" type="text" name="elChannels" style="width: 30ch" autocomplete="off" spellcheck="false"
           onchange="config.channels = event.target.value.split(/[\s,]/).filter(x => x)" />
-	<br/>
+	      <br/>
         <div class="row" style="margin-bottom: .5ch">
           <label for="elVolume">Volume:</label>
           <input id="elVolume" type="number" name="elVolume" min="0" max=100 value="50" style="width: 7ch"
@@ -135,7 +135,7 @@
         </div>
       </div>
       <div class="field">
-        <span>TTS Voices:</span>
+        <div class="row" style="justify-content: space-between;"><span>TTS Voices:</span><div><span>Vol x</span><input id="elPerVoiceVolumeFactor" type="number" min=".1" max="5" step=".1" style="width: 5ch" /></div></div>
         <table>
           <thead><th style="width: 3ch"></th><th style="width: 0"></th><th></th></thead>
           <tbody>
@@ -366,26 +366,33 @@ let tts_voice_m = undefined
 const elDefaultVoice = document.getElementById('elDefaultVoice')
 const elFemaleVoice = document.getElementById('elFemaleVoice')
 const elMaleVoice = document.getElementById('elMaleVoice')
+const elPerVoiceVolumeFactor = document.getElementById('elPerVoiceVolumeFactor')
+elPerVoiceVolumeFactor.addEventListener('input', () => {
+  config.volume_per_voice[tts_voice.name] = elPerVoiceVolumeFactor.value
+  speechSynthesis.cancel()
+  utter('new default voice selected', 0)
+})
 elDefaultVoice.addEventListener('input', () => {
   const name = elDefaultVoice.value
   tts_voice = TTS_ALL_VOICES.find(x => x.name === name)
   config.tts_default_voice_name = tts_voice?.name
   speechSynthesis.cancel()
-  utter('new default voice selected')
+  utter('new default voice selected', 0)
+  elPerVoiceVolumeFactor.value = config.volume_per_voice[name] ?? 1
 })
 elFemaleVoice.addEventListener('input', () => {
   const name = elFemaleVoice.value
   tts_voice_f = TTS_ALL_VOICES.find(x => x.name === name)
   config.tts_female_voice_name = tts_voice_f?.name
   speechSynthesis.cancel()
-  utter('new female voice selected')
+  utter('new female voice selected', 1)
 })
 elMaleVoice.addEventListener('input', () => {
   const name = elMaleVoice.value
   tts_voice_m = TTS_ALL_VOICES.find(x => x.name === name)
   config.tts_male_voice_name = tts_voice_m?.name
   speechSynthesis.cancel()
-  utter('new male voice selected')
+  utter('new male voice selected', 2)
 })
 speechSynthesis.onvoiceschanged = populateVoices
 populateVoices()
@@ -445,7 +452,8 @@ function utter(msg, voiceKIND = 0) {
   utt.voice = V
   utt.rate = config.tts_rate
   utt.pitch = config.tts_pitch
-  utt.volume = config.volume / 100
+  const volFactor = config.volume_per_voice[V.name] ?? 1
+  utt.volume = Math.min(1.0, (config.volume / 100) * volFactor)
 
   // TODO : un-hack this lang hack
   if (/[\u05d0-\u05ea]/.test(/[a-zA-Z\u05d0-\u05ea]/.exec(msg)?.[0] ?? '')) {
@@ -477,7 +485,7 @@ const elEnableChessNotation = document.getElementById('elEnableChessNotation')
 const elSilentChess = document.getElementById('elSilentChess')
 const elWordMap = document.getElementById('elWordMap')
 const elWhoCanCustomizeVoice = document.getElementById('elWhoCanCustomizeVoice')
-
+  
 loadConfig()
 function loadConfig(externalConf = null) {
   config = externalConf ?? JSON.parse(localStorage.getItem('config') ?? '{}')
@@ -501,6 +509,7 @@ function loadConfig(externalConf = null) {
   config.tts_female_voice_name ??= 'Microsoft Zira - English (United States)'
   config.tts_male_voice_name ??= 'Microsoft David - English (United States)'
   config.who_can_customize_voice ??= 'S'
+  config.volume_per_voice ??= {}
 
   updateConfigUI()
 
